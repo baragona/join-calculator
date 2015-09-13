@@ -3,7 +3,6 @@ package join_calculator;
 
 use strict;
 
-use udm;
 use Data::Dumper;
 use List::MoreUtils qw(uniq);
 
@@ -12,6 +11,59 @@ sub extract_table_reference{
     my $col = shift;
 
     return substr($col, 0, index($col, '.'));
+}
+
+sub in_list (\@$;$) { # Return 1 if string is anywhere in the array, 0 otherwise. in_list @arr, $str;
+  my ($aref, $val, $pos) = @_;
+  for ($pos ||= 0; $pos < @$aref; $pos++) {
+    return 1 if $aref->[$pos] eq $val;
+  }
+  return 0;
+}
+
+
+sub list_intersection{ #list_intersection([a],[b])
+
+    #list of things in common
+
+    my @a=@{shift()};
+    my @b=@{shift()};
+
+    my %h;
+
+    for my $x (@a){
+        $h{$x}=1;
+    }
+
+    my @out;
+
+    for my $x (@b){
+        if($h{$x}){
+            push @out, $x;
+        }
+    }
+
+    return @out;
+}
+
+sub list_difference{ #list_difference([a],[b])
+
+    #a minus b
+
+    my @a=@{shift()};
+    my @b=@{shift()};
+
+    my %h;
+
+    for my $x (@a){
+        $h{$x}=1;
+    }
+
+    for my $x (@b){
+        delete $h{$x};
+    }
+
+    return keys %h;
 }
 
 sub get_derived_cols_for_table{
@@ -83,9 +135,10 @@ sub BFS{
         my $n = shift @q;
         $call->($n, $layer);
         $visited{$n}=1;
-        push @q, (grep { not $visited{$_} and not udm::in_list(@q, $_) and not($ignore_link and $ignore_link->($n, $_))} @{$neighbors->{$n}});
+        push @q, (grep { not $visited{$_} and not in_list(@q, $_) and not($ignore_link and $ignore_link->($n, $_))} @{$neighbors->{$n}});
     }
 }
+
 
 sub transitive_links{
     my @links = @_;
@@ -96,7 +149,7 @@ sub transitive_links{
         for my $link(@links){
             my $add_to_this_set;
             for my $set(@transited_links){
-                if(udm::list_intersection($link, $set)){
+                if(list_intersection($link, $set)){
                     $add_to_this_set = $set;
                     last;
                 }
@@ -147,7 +200,7 @@ sub calc_from_clause{
                 $sorted_link_map->{join '=', (sort {$a cmp $b} ($col, $tbl))}=1;
                 push @{$neighbors->{$col}}, $tbl;
                 push @{$neighbors->{$tbl}}, $col;
-                if(udm::in_list(@{$abbr_to_row->{$tbl}[5]}, $colname)){
+                if(in_list(@{$abbr_to_row->{$tbl}[5]}, $colname)){
                     #This is a key column
                     COL2: for my $col2(@$link){
                         next if $col eq $col2;
@@ -191,7 +244,7 @@ sub calc_from_clause{
             next if $link_checked{"$tbl -> $tbl2"};
             $link_checked{"$tbl -> $tbl2"}=1;
 
-            if(udm::list_intersection($col_to_derived_cols->{$tbl}[0],$col_to_derived_cols->{$tbl2}[0])){
+            if(list_intersection($col_to_derived_cols->{$tbl}[0],$col_to_derived_cols->{$tbl2}[0])){
                 for my $equality(keys %{ $col_to_derived_cols->{$tbl}[1]{$tbl2} }){
                     $equalities->{$equality}=1;
                 }
@@ -213,7 +266,7 @@ sub calc_from_clause{
     my @final_set;
 
     while(scalar(@final_set) < scalar(keys %wanted_set)){
-        my @not_added_to_final_set = udm::list_difference([keys %wanted_set], \@final_set);
+        my @not_added_to_final_set = list_difference([keys %wanted_set], \@final_set);
 
         my @non_left_tables = grep {not $abbr_to_row->{$_}[2]} @not_added_to_final_set;
         my $random_non_left_tbl = $non_left_tables[0];
